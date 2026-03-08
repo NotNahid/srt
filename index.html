@@ -1,0 +1,174 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<title>TV Subtitle Player</title>
+<style>
+body{
+  margin:0;
+  background:black;
+  color:white;
+  font-family:Arial;
+  overflow:hidden;
+}
+
+/* Fullscreen big subtitles */
+#subtitle{
+  position:absolute;
+  top:50%;
+  left:50%;
+  transform:translate(-50%,-50%);
+  font-size:120px; /* huge for TV */
+  text-align:center;
+  max-width:90%;
+  line-height:1.2;
+  word-wrap: break-word;
+  text-shadow: 3px 3px 6px black;
+}
+
+/* Small video hidden for focus */
+#video{
+  display:none;
+}
+
+/* On-screen touch controls */
+#controls{
+  position:fixed;
+  bottom:50px;
+  left:50%;
+  transform:translateX(-50%);
+  display:flex;
+  gap:20px;
+}
+#controls button{
+  font-size:36px;
+  padding:20px 30px;
+  border-radius:12px;
+  border:none;
+  background:rgba(255,255,255,0.2);
+  color:white;
+  cursor:pointer;
+  text-shadow: 1px 1px 2px black;
+}
+#controls button:active{
+  background:rgba(255,255,255,0.4);
+}
+</style>
+</head>
+<body>
+
+<div id="subtitle">Loading subtitles...</div>
+<div id="video"></div>
+
+<!-- Touch buttons for phone -->
+<div id="controls">
+  <button onclick="seek(-10)">⏪ 10s</button>
+  <button onclick="togglePlay()">⏯️ Play/Pause</button>
+  <button onclick="seek(10)">10s ⏩</button>
+  <button onclick="seek(-60)">⏪ 1m</button>
+  <button onclick="seek(60)">1m ⏩</button>
+</div>
+
+<script src="https://www.youtube.com/iframe_api"></script>
+<script>
+let player;
+let subtitles=[];
+
+// Preload SRT
+fetch("subs.srt")
+  .then(res=>res.text())
+  .then(data=>parseSRT(data));
+
+// YouTube video link (change this easily)
+const youtubeLink = "https://www.youtube.com/watch?v=7bGKwWMHXpQ";
+
+// Extract video ID
+function extractVideoID(url){
+  let id="";
+  if(url.includes("v=")) id=url.split("v=")[1].split("&")[0];
+  else if(url.includes("youtu.be/")) id=url.split("youtu.be/")[1].split("?")[0];
+  else if(url.includes("embed/")) id=url.split("embed/")[1].split("?")[0];
+  return id;
+}
+
+// Load YouTube video automatically
+function loadVideo(){
+  let videoID = extractVideoID(youtubeLink);
+  player = new YT.Player("video",{
+    height:"180",
+    width:"320",
+    videoId:videoID,
+    playerVars:{rel:0,modestbranding:1,playsinline:1,autoplay:1},
+    events:{'onReady':onPlayerReady}
+  });
+}
+function onYouTubeIframeAPIReady(){ loadVideo(); }
+function onPlayerReady(){ setInterval(updateSubtitle,100); }
+
+// Parse SRT
+function parseSRT(data){
+  let blocks=data.split(/\n\n+/);
+  subtitles = blocks.map(block=>{
+    let lines = block.split("\n");
+    if(lines.length>=3){
+      let times = lines[1].split(" --> ");
+      return { start:toSeconds(times[0]), end:toSeconds(times[1]), text:lines.slice(2).join(" ") };
+    }
+  }).filter(Boolean);
+}
+function toSeconds(time){
+  let parts=time.replace(",",".").split(":");
+  return parseFloat(parts[0])*3600 + parseFloat(parts[1])*60 + parseFloat(parts[2]);
+}
+
+// Update subtitle on video time
+function updateSubtitle(){
+  if(!player || !player.getCurrentTime) return;
+  let time=player.getCurrentTime();
+  for(let s of subtitles){
+    if(time>=s.start && time<=s.end){
+      document.getElementById("subtitle").innerText=s.text;
+      return;
+    }
+  }
+}
+
+// Keyboard shortcuts (TV remote friendly)
+document.addEventListener("keydown", function(e){
+  if(!player) return;
+  let t = player.getCurrentTime();
+  switch(e.code){
+    case "Space":
+      togglePlay();
+      e.preventDefault();
+      break;
+    case "ArrowRight":
+      seek(10);
+      break;
+    case "ArrowLeft":
+      seek(-10);
+      break;
+    case "KeyL":
+      seek(60);
+      break;
+    case "KeyJ":
+      seek(-60);
+      break;
+  }
+});
+
+// Seek function
+function seek(seconds){
+  if(!player) return;
+  let t = player.getCurrentTime();
+  player.seekTo(Math.max(t + seconds,0), true);
+}
+
+// Play/pause toggle
+function togglePlay(){
+  if(!player) return;
+  player.getPlayerState()===1 ? player.pauseVideo() : player.playVideo();
+}
+</script>
+</body>
+</html>
