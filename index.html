@@ -2,53 +2,60 @@
 <html>
 <head>
 <meta charset="UTF-8">
-<title>TV Subtitle Player</title>
+<title>Smart Responsive Subtitle Player</title>
 <style>
 body{
   margin:0;
   background:black;
   color:white;
-  font-family:Arial;
+  font-family:Arial, sans-serif;
   overflow:hidden;
 }
 
-/* Fullscreen big subtitles */
+/* Subtitle container */
 #subtitle{
   position:absolute;
   top:50%;
   left:50%;
   transform:translate(-50%,-50%);
-  font-size:120px; /* huge for TV */
+  font-size:80px; /* default size */
   text-align:center;
   max-width:90%;
   line-height:1.2;
   word-wrap: break-word;
-  text-shadow: 3px 3px 6px black;
+  text-shadow: 2px 2px 4px black;
+  white-space:pre-wrap;
 }
 
-/* Small video hidden for focus */
+/* Small video */
 #video{
-  display:none;
+  position:fixed;
+  bottom:20px;
+  right:20px;
+  width:320px;
+  height:180px;
+  border:2px solid #333;
+  border-radius:8px;
+  background:black;
 }
 
-/* On-screen touch controls */
+/* Navigation buttons */
 #controls{
   position:fixed;
-  bottom:50px;
-  left:50%;
-  transform:translateX(-50%);
+  bottom:20px;
+  left:20px;
   display:flex;
-  gap:20px;
+  gap:10px;
 }
 #controls button{
-  font-size:36px;
-  padding:20px 30px;
-  border-radius:12px;
+  font-size:24px;
+  padding:10px 14px;
+  border-radius:8px;
   border:none;
   background:rgba(255,255,255,0.2);
   color:white;
   cursor:pointer;
-  text-shadow: 1px 1px 2px black;
+  text-shadow:1px 1px 2px black;
 }
 #controls button:active{
   background:rgba(255,255,255,0.4);
@@ -60,10 +67,9 @@ body{
 <div id="subtitle">Loading subtitles...</div>
 <div id="video"></div>
 
-<!-- Touch buttons for phone -->
 <div id="controls">
   <button onclick="seek(-10)">⏪ 10s</button>
-  <button onclick="togglePlay()">⏯️ Play/Pause</button>
+  <button onclick="togglePlay()">⏯️</button>
   <button onclick="seek(10)">10s ⏩</button>
   <button onclick="seek(-60)">⏪ 1m</button>
   <button onclick="seek(60)">1m ⏩</button>
@@ -74,12 +80,12 @@ body{
 let player;
 let subtitles=[];
 
-// Preload SRT
+// Load SRT
 fetch("subs.srt")
-  .then(res=>res.text())
-  .then(data=>parseSRT(data));
+  .then(res => res.text())
+  .then(data => parseSRT(data));
 
-// YouTube video link (change this easily)
+// YouTube video link
 const youtubeLink = "https://www.youtube.com/watch?v=7bGKwWMHXpQ";
 
 // Extract video ID
@@ -91,7 +97,7 @@ function extractVideoID(url){
   return id;
 }
 
-// Load YouTube video automatically
+// Auto-load video
 function loadVideo(){
   let videoID = extractVideoID(youtubeLink);
   player = new YT.Player("video",{
@@ -108,10 +114,10 @@ function onPlayerReady(){ setInterval(updateSubtitle,100); }
 // Parse SRT
 function parseSRT(data){
   let blocks=data.split(/\n\n+/);
-  subtitles = blocks.map(block=>{
-    let lines = block.split("\n");
+  subtitles=blocks.map(block=>{
+    let lines=block.split("\n");
     if(lines.length>=3){
-      let times = lines[1].split(" --> ");
+      let times=lines[1].split(" --> ");
       return { start:toSeconds(times[0]), end:toSeconds(times[1]), text:lines.slice(2).join(" ") };
     }
   }).filter(Boolean);
@@ -121,39 +127,42 @@ function toSeconds(time){
   return parseFloat(parts[0])*3600 + parseFloat(parts[1])*60 + parseFloat(parts[2]);
 }
 
-// Update subtitle on video time
+// Update subtitle
 function updateSubtitle(){
   if(!player || !player.getCurrentTime) return;
   let time=player.getCurrentTime();
   for(let s of subtitles){
     if(time>=s.start && time<=s.end){
-      document.getElementById("subtitle").innerText=s.text;
+      displaySubtitle(s.text);
       return;
     }
   }
 }
 
-// Keyboard shortcuts (TV remote friendly)
-document.addEventListener("keydown", function(e){
+// Smart subtitle display with auto font scaling
+function displaySubtitle(text){
+  const subEl = document.getElementById("subtitle");
+  subEl.innerText = text;
+  let fontSize = 80; // default
+  subEl.style.fontSize = fontSize + "px";
+
+  // Reduce font size until it fits inside 90% width
+  while(subEl.scrollWidth > window.innerWidth * 0.9 && fontSize > 20){
+    fontSize -= 2;
+    subEl.style.fontSize = fontSize + "px";
+  }
+}
+
+// Keyboard shortcuts
+document.addEventListener("keydown",function(e){
   if(!player) return;
   let t = player.getCurrentTime();
   switch(e.code){
-    case "Space":
-      togglePlay();
-      e.preventDefault();
-      break;
-    case "ArrowRight":
-      seek(10);
-      break;
-    case "ArrowLeft":
-      seek(-10);
-      break;
-    case "KeyL":
-      seek(60);
-      break;
-    case "KeyJ":
-      seek(-60);
-      break;
+    case "Space": togglePlay(); e.preventDefault(); break;
+    case "ArrowRight": seek(10); break;
+    case "ArrowLeft": seek(-10); break;
+    case "KeyL": seek(60); break;
+    case "KeyJ": seek(-60); break;
   }
 });
 
@@ -161,7 +170,7 @@ document.addEventListener("keydown", function(e){
 function seek(seconds){
   if(!player) return;
   let t = player.getCurrentTime();
-  player.seekTo(Math.max(t + seconds,0), true);
+  player.seekTo(Math.max(t+seconds,0),true);
 }
 
 // Play/pause toggle
