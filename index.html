@@ -1,183 +1,1258 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>Smart Responsive Subtitle Player</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SubPlayer</title>
 <style>
-body{
-  margin:0;
-  background:black;
-  color:white;
-  font-family:Arial, sans-serif;
-  overflow:hidden;
-}
+  * { margin: 0; padding: 0; box-sizing: border-box; }
 
-/* Subtitle container */
-#subtitle{
-  position:absolute;
-  top:50%;
-  left:50%;
-  transform:translate(-50%,-50%);
-  font-size:80px; /* default size */
-  text-align:center;
-  max-width:90%;
-  line-height:1.2;
-  word-wrap: break-word;
-  text-shadow: 2px 2px 4px black;
-  white-space:pre-wrap;
-}
+  body {
+    background: #000;
+    width: 100vw;
+    height: 100vh;
+    overflow: hidden;
+    font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+  }
 
-/* Small video */
-#video{
-  position:fixed;
-  bottom:20px;
-  right:20px;
-  width:320px;
-  height:180px;
-  border:2px solid #333;
-  border-radius:8px;
-  background:black;
-}
+  /* ── VIDEO ── */
+  #player {
+    position: fixed;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+  }
+  #player iframe {
+    position: fixed;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    border: none;
+  }
 
-/* Navigation buttons */
-#controls{
-  position:fixed;
-  bottom:20px;
-  left:20px;
-  display:flex;
-  gap:10px;
-}
-#controls button{
-  font-size:24px;
-  padding:10px 14px;
-  border-radius:8px;
-  border:none;
-  background:rgba(255,255,255,0.2);
-  color:white;
-  cursor:pointer;
-  text-shadow:1px 1px 2px black;
-}
-#controls button:active{
-  background:rgba(255,255,255,0.4);
-}
+  /* ── SUBTITLE OVERLAY ── */
+  #subtitle-wrap {
+    position: fixed;
+    bottom: 90px;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 10;
+    text-align: center;
+    max-width: 82%;
+    pointer-events: none;
+    transition: bottom 0.3s, opacity 0.3s;
+  }
+  #subtitle {
+    display: inline;
+    background: rgba(8, 8, 8, 0.85);
+    color: #ffd700;
+    font-size: 42px;
+    line-height: 1.7;
+    padding: 4px 14px;
+    border-radius: 4px;
+    white-space: pre-wrap;
+    box-decoration-break: clone;
+    -webkit-box-decoration-break: clone;
+    opacity: 1;
+    transition: opacity 0.18s, font-size 0.3s, color 0.3s;
+    text-shadow: 1px 1px 3px rgba(0,0,0,0.9);
+    font-weight: 500;
+  }
+  #subtitle.blank { opacity: 0; }
+
+  /* ── FLOATING PILL (top-right, away from YT controls) ── */
+  #float-pill {
+    position: fixed;
+    top: 16px;
+    right: 16px;
+    z-index: 30;
+    display: none;
+    align-items: center;
+    gap: 2px;
+    background: rgba(0, 0, 0, 0.7);
+    backdrop-filter: blur(12px);
+    border: 1px solid rgba(255,255,255,0.08);
+    border-radius: 12px;
+    padding: 4px;
+    opacity: 1;
+    transition: opacity 0.4s, transform 0.3s;
+    transform: translateY(0);
+  }
+  #float-pill.autohide {
+    opacity: 0;
+    transform: translateY(-8px);
+    pointer-events: none;
+  }
+  #float-pill:hover {
+    opacity: 1 !important;
+    transform: translateY(0) !important;
+    pointer-events: all !important;
+  }
+
+  .pill-btn {
+    background: transparent;
+    border: none;
+    color: rgba(255,255,255,0.7);
+    border-radius: 9px;
+    width: 38px;
+    height: 38px;
+    font-size: 16px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.15s;
+    position: relative;
+  }
+  .pill-btn:hover { background: rgba(255,255,255,0.12); color: #fff; }
+  .pill-btn.active { background: rgba(74,158,255,0.2); color: #4a9eff; }
+  .pill-btn .badge {
+    position: absolute;
+    top: 4px;
+    right: 4px;
+    width: 7px;
+    height: 7px;
+    background: #4a9eff;
+    border-radius: 50%;
+    display: none;
+  }
+  .pill-btn .badge.on { display: block; }
+
+  .pill-sep {
+    width: 1px;
+    height: 20px;
+    background: rgba(255,255,255,0.08);
+    margin: 0 2px;
+  }
+
+  /* Tooltip for pill buttons */
+  .pill-btn .tip {
+    position: absolute;
+    top: 44px;
+    right: 0;
+    background: rgba(0,0,0,0.9);
+    color: #ccc;
+    font-size: 11px;
+    padding: 5px 10px;
+    border-radius: 6px;
+    white-space: nowrap;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.15s;
+    border: 1px solid rgba(255,255,255,0.06);
+  }
+  .pill-btn:hover .tip { opacity: 1; }
+  .pill-btn .tip kbd {
+    background: rgba(255,255,255,0.1);
+    border-radius: 3px;
+    padding: 0 4px;
+    font-family: monospace;
+    font-size: 10px;
+    margin-left: 6px;
+    color: #888;
+  }
+
+  /* ── OFFSET NUDGE (top-center, minimal) ── */
+  #offset-indicator {
+    position: fixed;
+    top: 18px;
+    left: 50%;
+    transform: translateX(-50%) translateY(-8px);
+    background: rgba(0,0,0,0.85);
+    backdrop-filter: blur(8px);
+    border: 1px solid rgba(255,255,255,0.08);
+    color: #fff;
+    padding: 7px 18px;
+    border-radius: 20px;
+    font-size: 13px;
+    font-family: 'SF Mono', 'Cascadia Code', monospace;
+    opacity: 0;
+    pointer-events: none;
+    z-index: 300;
+    transition: all 0.25s;
+  }
+  #offset-indicator.show {
+    opacity: 1;
+    transform: translateX(-50%) translateY(0);
+  }
+
+  /* ── SETTINGS PANEL (top-right, drops below pill) ── */
+  #settings-panel {
+    position: fixed;
+    top: 66px;
+    right: 16px;
+    z-index: 35;
+    background: rgba(14,14,14,0.96);
+    border: 1px solid rgba(255,255,255,0.08);
+    border-radius: 14px;
+    padding: 0;
+    width: 300px;
+    max-height: calc(100vh - 100px);
+    overflow-y: auto;
+    display: none;
+    backdrop-filter: blur(16px);
+    box-shadow: 0 20px 60px rgba(0,0,0,0.6);
+    animation: panelDrop 0.25s ease;
+  }
+  @keyframes panelDrop {
+    from { transform: translateY(-8px); opacity: 0; }
+    to { transform: translateY(0); opacity: 1; }
+  }
+  #settings-panel.open { display: block; }
+  #settings-panel::-webkit-scrollbar { width: 4px; }
+  #settings-panel::-webkit-scrollbar-thumb { background: #333; border-radius: 2px; }
+
+  .panel-section {
+    padding: 18px 20px;
+    border-bottom: 1px solid rgba(255,255,255,0.04);
+  }
+  .panel-section:last-child { border-bottom: none; }
+  .panel-section h4 {
+    font-size: 11px;
+    color: #555;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    margin-bottom: 14px;
+    font-weight: 600;
+  }
+
+  .setting-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 14px;
+  }
+  .setting-row:last-child { margin-bottom: 0; }
+  .setting-row .s-label {
+    font-size: 13px;
+    color: #aaa;
+  }
+  .setting-row .s-value {
+    font-size: 12px;
+    color: #666;
+    font-family: monospace;
+    min-width: 40px;
+    text-align: right;
+  }
+
+  .slider-wrap {
+    flex: 1;
+    margin: 0 12px;
+  }
+  input[type=range] {
+    width: 100%;
+    accent-color: #4a9eff;
+    height: 3px;
+    cursor: pointer;
+  }
+
+  /* Color swatches */
+  .color-row {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+  .color-swatch {
+    width: 30px;
+    height: 30px;
+    border-radius: 8px;
+    border: 2px solid transparent;
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+  .color-swatch:hover { transform: scale(1.15); }
+  .color-swatch.active { border-color: #fff; box-shadow: 0 0 0 2px rgba(255,255,255,0.2); }
+
+  .font-select {
+    width: 100%;
+    background: #1a1a1a;
+    border: 1px solid #252525;
+    color: #ccc;
+    border-radius: 8px;
+    padding: 9px 12px;
+    font-size: 12px;
+    outline: none;
+    cursor: pointer;
+  }
+  .font-select:focus { border-color: #4a9eff; }
+
+  .reset-btn {
+    width: 100%;
+    padding: 10px;
+    background: rgba(255,255,255,0.04);
+    border: 1px solid rgba(255,255,255,0.06);
+    border-radius: 8px;
+    color: #888;
+    font-size: 12px;
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+  .reset-btn:hover { background: rgba(255,255,255,0.08); color: #ccc; }
+
+  /* ── SUBTITLE LIST PANEL ── */
+  #sublist-panel {
+    position: fixed;
+    top: 0;
+    right: -380px;
+    bottom: 0;
+    width: 360px;
+    max-width: 85vw;
+    z-index: 35;
+    background: rgba(10,10,10,0.97);
+    border-left: 1px solid rgba(255,255,255,0.06);
+    display: flex;
+    flex-direction: column;
+    backdrop-filter: blur(16px);
+    transition: right 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    box-shadow: -10px 0 40px rgba(0,0,0,0.5);
+  }
+  #sublist-panel.open { right: 0; }
+
+  .slist-header {
+    padding: 18px 20px;
+    border-bottom: 1px solid rgba(255,255,255,0.06);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-shrink: 0;
+  }
+  .slist-header h3 {
+    color: #fff;
+    font-size: 15px;
+    font-weight: 600;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  .slist-header .sub-count {
+    font-size: 12px;
+    color: #555;
+    font-weight: 400;
+  }
+  .slist-header .close-x {
+    background: none;
+    border: none;
+    color: #555;
+    font-size: 20px;
+    cursor: pointer;
+    padding: 4px 8px;
+    border-radius: 6px;
+    transition: all 0.15s;
+    line-height: 1;
+  }
+  .slist-header .close-x:hover { color: #fff; background: rgba(255,255,255,0.06); }
+
+  .slist-search {
+    padding: 12px 20px;
+    border-bottom: 1px solid rgba(255,255,255,0.04);
+    flex-shrink: 0;
+  }
+  .slist-search input {
+    width: 100%;
+    background: rgba(255,255,255,0.04);
+    border: 1px solid rgba(255,255,255,0.06);
+    color: #fff;
+    border-radius: 8px;
+    padding: 9px 14px;
+    font-size: 13px;
+    outline: none;
+    transition: border-color 0.2s;
+  }
+  .slist-search input:focus { border-color: rgba(74,158,255,0.4); }
+  .slist-search input::placeholder { color: #333; }
+
+  .slist-items {
+    flex: 1;
+    overflow-y: auto;
+    padding: 6px 10px;
+  }
+  .slist-items::-webkit-scrollbar { width: 4px; }
+  .slist-items::-webkit-scrollbar-track { background: transparent; }
+  .slist-items::-webkit-scrollbar-thumb { background: #222; border-radius: 2px; }
+
+  .si {
+    display: flex;
+    gap: 12px;
+    padding: 10px 12px;
+    border-radius: 10px;
+    cursor: pointer;
+    transition: background 0.12s;
+    align-items: flex-start;
+    margin-bottom: 2px;
+  }
+  .si:hover { background: rgba(255,255,255,0.04); }
+  .si.now { background: rgba(74,158,255,0.08); }
+  .si .si-t {
+    font-size: 11px;
+    color: #4a9eff;
+    font-family: 'SF Mono', 'Cascadia Code', monospace;
+    min-width: 50px;
+    padding-top: 2px;
+    flex-shrink: 0;
+    letter-spacing: -0.5px;
+  }
+  .si .si-txt {
+    font-size: 13px;
+    color: #bbb;
+    line-height: 1.45;
+  }
+  .si.now .si-txt { color: #fff; }
+
+  /* ── STARTUP MODAL ── */
+  #modal {
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.97);
+    z-index: 100;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    opacity: 1;
+    transition: opacity 0.35s;
+  }
+  #modal.hiding { opacity: 0; pointer-events: none; }
+  #modal.gone { display: none; }
+
+  .mbox {
+    background: #0e0e0e;
+    border: 1px solid rgba(255,255,255,0.06);
+    border-radius: 20px;
+    padding: 44px 40px 36px;
+    width: 440px;
+    max-width: 92vw;
+    animation: mboxIn 0.5s cubic-bezier(0.16, 1, 0.3, 1);
+  }
+  @keyframes mboxIn {
+    from { transform: scale(0.95) translateY(16px); opacity: 0; }
+    to { transform: scale(1) translateY(0); opacity: 1; }
+  }
+
+  .mbox-logo {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 6px;
+  }
+  .mbox-logo .icon {
+    width: 36px;
+    height: 36px;
+    background: linear-gradient(135deg, #4a9eff, #6c5ce7);
+    border-radius: 10px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 17px;
+    color: #fff;
+  }
+  .mbox-logo h1 {
+    font-size: 22px;
+    color: #fff;
+    font-weight: 700;
+  }
+  .mbox > p {
+    font-size: 13px;
+    color: #555;
+    margin-bottom: 30px;
+    margin-top: 4px;
+  }
+
+  .fg {
+    margin-bottom: 18px;
+  }
+  .fg-label {
+    font-size: 11px;
+    color: #444;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    margin-bottom: 8px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .fg-label .opt { font-size: 9px; color: #333; text-transform: none; letter-spacing: 0; }
+
+  .fg input[type=text] {
+    width: 100%;
+    background: rgba(255,255,255,0.03);
+    border: 1px solid rgba(255,255,255,0.08);
+    color: #fff;
+    border-radius: 10px;
+    padding: 13px 16px;
+    font-size: 14px;
+    outline: none;
+    transition: border-color 0.2s, box-shadow 0.2s;
+  }
+  .fg input[type=text]:focus {
+    border-color: rgba(74,158,255,0.5);
+    box-shadow: 0 0 0 3px rgba(74,158,255,0.08);
+  }
+  .fg input[type=text]::placeholder { color: #2a2a2a; }
+
+  .url-wrap { position: relative; }
+  .url-wrap .paste-btn {
+    position: absolute;
+    right: 10px;
+    top: 50%;
+    transform: translateY(-50%);
+    background: rgba(255,255,255,0.05);
+    border: 1px solid rgba(255,255,255,0.08);
+    color: #666;
+    border-radius: 7px;
+    padding: 5px 12px;
+    font-size: 11px;
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+  .url-wrap .paste-btn:hover { background: rgba(255,255,255,0.1); color: #fff; }
+
+  .file-drop {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    background: rgba(255,255,255,0.02);
+    border: 1px dashed rgba(255,255,255,0.08);
+    border-radius: 10px;
+    padding: 16px;
+    cursor: pointer;
+    font-size: 13px;
+    color: #444;
+    transition: all 0.2s;
+    width: 100%;
+    position: relative;
+  }
+  .file-drop:hover { border-color: rgba(74,158,255,0.3); color: #888; }
+  .file-drop.has { border-style: solid; border-color: rgba(74,158,255,0.3); }
+  .file-drop .ficon { font-size: 20px; flex-shrink: 0; }
+  .file-drop .fname { color: #4a9eff; flex: 1; }
+  .file-drop .fclear {
+    color: #444;
+    font-size: 16px;
+    padding: 2px 6px;
+    border-radius: 4px;
+    transition: all 0.15s;
+    display: none;
+  }
+  .file-drop.has .fclear { display: block; }
+  .file-drop .fclear:hover { color: #ff4444; }
+
+  .offset-micro {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+  }
+  .offset-micro .ob {
+    width: 36px;
+    height: 36px;
+    background: rgba(255,255,255,0.04);
+    border: 1px solid rgba(255,255,255,0.08);
+    color: #aaa;
+    border-radius: 8px;
+    font-size: 16px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.15s;
+    flex-shrink: 0;
+  }
+  .offset-micro .ob:hover { background: rgba(255,255,255,0.08); color: #fff; }
+  .offset-micro input {
+    width: 80px !important;
+    text-align: center;
+    font-family: monospace;
+  }
+  .offset-micro .olabel { font-size: 11px; color: #444; }
+
+  .btn-go {
+    width: 100%;
+    padding: 15px;
+    background: linear-gradient(135deg, #4a9eff, #3d7de0);
+    border: none;
+    border-radius: 12px;
+    color: #fff;
+    font-size: 15px;
+    font-weight: 700;
+    cursor: pointer;
+    margin-top: 8px;
+    transition: all 0.2s;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+  }
+  .btn-go:hover { filter: brightness(1.1); transform: translateY(-1px); box-shadow: 0 6px 24px rgba(74,158,255,0.25); }
+  .btn-go:active { transform: translateY(0); }
+
+  .or-line {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    margin: 20px 0 16px;
+    color: #222;
+    font-size: 12px;
+  }
+  .or-line::before, .or-line::after {
+    content: '';
+    flex: 1;
+    height: 1px;
+    background: rgba(255,255,255,0.04);
+  }
+
+  .btn-demo {
+    width: 100%;
+    padding: 13px;
+    background: transparent;
+    border: 1px solid rgba(255,255,255,0.06);
+    border-radius: 12px;
+    color: #555;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+  .btn-demo:hover { border-color: rgba(255,255,255,0.15); color: #aaa; }
+
+  .keys-hint {
+    margin-top: 20px;
+    font-size: 11px;
+    color: #222;
+    text-align: center;
+    line-height: 2;
+  }
+  .keys-hint kbd {
+    background: rgba(255,255,255,0.04);
+    border: 1px solid rgba(255,255,255,0.06);
+    border-radius: 4px;
+    padding: 2px 7px;
+    font-size: 10px;
+    font-family: monospace;
+    color: #444;
+  }
+
+  /* ── DRAG OVERLAY ── */
+  #drag-overlay {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(74,158,255,0.06);
+    border: 3px dashed rgba(74,158,255,0.4);
+    z-index: 200;
+    align-items: center;
+    justify-content: center;
+    flex-direction: column;
+    gap: 10px;
+    font-size: 18px;
+    color: #4a9eff;
+    font-weight: 600;
+    pointer-events: none;
+    backdrop-filter: blur(6px);
+  }
+  #drag-overlay .ds { font-size: 13px; font-weight: 400; opacity: 0.6; }
+  #drag-overlay.on { display: flex; }
+
+  /* ── TOAST ── */
+  #toast {
+    position: fixed;
+    top: 18px;
+    left: 50%;
+    transform: translateX(-50%) translateY(-12px);
+    background: rgba(14,14,14,0.92);
+    backdrop-filter: blur(12px);
+    border: 1px solid rgba(255,255,255,0.08);
+    color: #fff;
+    padding: 10px 24px;
+    border-radius: 30px;
+    font-size: 13px;
+    opacity: 0;
+    pointer-events: none;
+    z-index: 300;
+    transition: all 0.3s;
+    white-space: nowrap;
+  }
+  #toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+
+  /* ── CLICK CATCHER (invisible strip so hover works above YT) ── */
+  #hover-zone {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 60px;
+    z-index: 29;
+    /* pointer-events: none by default, enabled on hover */
+  }
+
+  /* ── RESPONSIVE ── */
+  @media (max-width: 640px) {
+    #subtitle { font-size: 22px; line-height: 1.5; }
+    #subtitle-wrap { max-width: 92%; bottom: 80px; }
+    .mbox { padding: 28px 22px 24px; }
+    .mbox-logo h1 { font-size: 19px; }
+    #settings-panel { width: calc(100vw - 20px); right: 10px; top: 60px; }
+    .pill-btn { width: 34px; height: 34px; font-size: 14px; }
+    #float-pill { top: 10px; right: 10px; }
+    #sublist-panel { width: 100vw; max-width: 100vw; }
+  }
 </style>
 </head>
 <body>
 
-<div id="subtitle">Loading subtitles...</div>
-<div id="video"></div>
+<!-- ── MODAL ── -->
+<div id="modal">
+  <div class="mbox">
+    <div class="mbox-logo">
+      <div class="icon">▶</div>
+      <h1>SubPlayer</h1>
+    </div>
+    <p>Watch YouTube with your own subtitles — any language, perfectly synced.</p>
 
-<div id="controls">
-  <button onclick="seek(-10)">⏪ 10s</button>
-  <button onclick="togglePlay()">⏯️</button>
-  <button onclick="seek(10)">10s ⏩</button>
-  <button onclick="seek(-60)">⏪ 1m</button>
-  <button onclick="seek(60)">1m ⏩</button>
+    <div class="fg">
+      <div class="fg-label">YouTube URL</div>
+      <div class="url-wrap">
+        <input type="text" id="url-input" placeholder="https://youtube.com/watch?v=..." />
+        <button class="paste-btn" onclick="pasteURL()">📋 Paste</button>
+      </div>
+    </div>
+
+    <div class="fg">
+      <div class="fg-label">Subtitle file <span class="opt">.srt .vtt .ass</span></div>
+      <label class="file-drop" id="file-drop-label">
+        <span class="ficon">📄</span>
+        <span class="fname" id="file-name">Choose file or drag & drop…</span>
+        <span class="fclear" onclick="clearFile(event)" title="Remove">✕</span>
+        <input type="file" accept=".srt,.vtt,.ass,.ssa" id="sub-file" onchange="onFilePick(event)" style="display:none"/>
+      </label>
+    </div>
+
+    <div class="fg">
+      <div class="fg-label">Time offset <span class="opt">(optional)</span></div>
+      <div class="offset-micro">
+        <button class="ob" onclick="nudgeModal(-0.5)">−</button>
+        <input type="text" id="offset-input" value="0.0" />
+        <button class="ob" onclick="nudgeModal(0.5)">+</button>
+        <span class="olabel">seconds</span>
+      </div>
+    </div>
+
+    <button class="btn-go" onclick="launch()">▶ &nbsp;Play</button>
+
+    <div class="or-line">or</div>
+    <button class="btn-demo" onclick="launchDefaults()">Try with demo video</button>
+
+    <div class="keys-hint">
+      <kbd>F</kbd> Fullscreen &nbsp;
+      <kbd>Z</kbd> <kbd>X</kbd> Offset &nbsp;
+      <kbd>S</kbd> Settings &nbsp;
+      <kbd>L</kbd> Subs list &nbsp;
+      <kbd>H</kbd> Hide subs
+    </div>
+  </div>
 </div>
+
+<!-- ── DRAG OVERLAY ── -->
+<div id="drag-overlay">
+  📄 Drop subtitle file
+  <span class="ds">.srt, .vtt, .ass</span>
+</div>
+
+<!-- ── TOAST & OFFSET ── -->
+<div id="toast"></div>
+<div id="offset-indicator"></div>
+
+<!-- ── VIDEO ── -->
+<div id="player"></div>
+
+<!-- ── HOVER ZONE (top strip to trigger pill visibility) ── -->
+<div id="hover-zone"
+     onmouseenter="showPill()"
+     onmouseleave="schedulePillHide()"></div>
+
+<!-- ── FLOATING PILL (top-right corner, auto-hides) ── -->
+<div id="float-pill"
+     onmouseenter="cancelPillHide()"
+     onmouseleave="schedulePillHide()">
+
+  <button class="pill-btn" onclick="adjustOffsetLive(-0.5)" title="−0.5s">
+    <span>−</span>
+    <span class="tip">Offset −0.5s<kbd>Z</kbd></span>
+  </button>
+  <button class="pill-btn" onclick="adjustOffsetLive(+0.5)" title="+0.5s">
+    <span>+</span>
+    <span class="tip">Offset +0.5s<kbd>X</kbd></span>
+  </button>
+
+  <div class="pill-sep"></div>
+
+  <button class="pill-btn" onclick="toggleSubVis()" id="btn-eye" title="Toggle subtitles">
+    <span id="eye-icon">👁</span>
+    <span class="tip">Toggle subs<kbd>H</kbd></span>
+  </button>
+  <button class="pill-btn" onclick="toggleSubList()" id="btn-list" title="Subtitle list">
+    <span>☰</span>
+    <span class="badge" id="list-badge"></span>
+    <span class="tip">Sub list<kbd>L</kbd></span>
+  </button>
+  <button class="pill-btn" onclick="toggleSettings()" id="btn-set" title="Settings">
+    <span>⚙</span>
+    <span class="tip">Settings<kbd>S</kbd></span>
+  </button>
+
+  <div class="pill-sep"></div>
+
+  <button class="pill-btn" onclick="toggleFullscreen()" id="btn-fs" title="Fullscreen">
+    <span id="fs-icon">⛶</span>
+    <span class="tip">Fullscreen<kbd>F</kbd></span>
+  </button>
+</div>
+
+<!-- ── SETTINGS PANEL ── -->
+<div id="settings-panel">
+  <div class="panel-section">
+    <h4>Appearance</h4>
+
+    <div class="setting-row">
+      <span class="s-label">Size</span>
+      <div class="slider-wrap">
+        <input type="range" min="16" max="80" value="42" id="set-size" oninput="applySet()" />
+      </div>
+      <span class="s-value" id="v-size">42px</span>
+    </div>
+
+    <div class="setting-row">
+      <span class="s-label">BG opacity</span>
+      <div class="slider-wrap">
+        <input type="range" min="0" max="100" value="85" id="set-bg" oninput="applySet()" />
+      </div>
+      <span class="s-value" id="v-bg">85%</span>
+    </div>
+
+    <div class="setting-row">
+      <span class="s-label">Position</span>
+      <div class="slider-wrap">
+        <input type="range" min="40" max="350" value="90" id="set-pos" oninput="applySet()" />
+      </div>
+      <span class="s-value" id="v-pos">90px</span>
+    </div>
+  </div>
+
+  <div class="panel-section">
+    <h4>Color</h4>
+    <div class="color-row">
+      <div class="color-swatch active" style="background:#ffd700" onclick="pickColor('#ffd700',this)"></div>
+      <div class="color-swatch" style="background:#ffffff" onclick="pickColor('#ffffff',this)"></div>
+      <div class="color-swatch" style="background:#00ff88" onclick="pickColor('#00ff88',this)"></div>
+      <div class="color-swatch" style="background:#ff6b6b" onclick="pickColor('#ff6b6b',this)"></div>
+      <div class="color-swatch" style="background:#74b9ff" onclick="pickColor('#74b9ff',this)"></div>
+      <div class="color-swatch" style="background:#fd79a8" onclick="pickColor('#fd79a8',this)"></div>
+      <div class="color-swatch" style="background:#ffa502" onclick="pickColor('#ffa502',this)"></div>
+      <div class="color-swatch" style="background:#a29bfe" onclick="pickColor('#a29bfe',this)"></div>
+    </div>
+  </div>
+
+  <div class="panel-section">
+    <h4>Font</h4>
+    <select class="font-select" id="set-font" onchange="applySet()">
+      <option value="'Segoe UI', system-ui, sans-serif">System Default</option>
+      <option value="Arial, Helvetica, sans-serif">Arial</option>
+      <option value="Georgia, 'Times New Roman', serif">Georgia</option>
+      <option value="'Courier New', monospace">Monospace</option>
+      <option value="'Trebuchet MS', sans-serif">Trebuchet</option>
+    </select>
+  </div>
+
+  <div class="panel-section">
+    <button class="reset-btn" onclick="resetSettings()">Reset to defaults</button>
+  </div>
+</div>
+
+<!-- ── SUBTITLE LIST ── -->
+<div id="sublist-panel">
+  <div class="slist-header">
+    <h3>Subtitles <span class="sub-count" id="sub-count"></span></h3>
+    <button class="close-x" onclick="toggleSubList()">✕</button>
+  </div>
+  <div class="slist-search">
+    <input type="text" placeholder="Search…" id="sub-search" oninput="filterSubs()" />
+  </div>
+  <div class="slist-items" id="slist"></div>
+</div>
+
+<!-- ── SUBTITLE DISPLAY ── -->
+<div id="subtitle-wrap">
+  <span id="subtitle" class="blank"></span>
+</div>
+
 
 <script src="https://www.youtube.com/iframe_api"></script>
 <script>
-let player;
-let subtitles=[];
+/* ═══════════════════════════════════════════
+   CONFIG
+   ═══════════════════════════════════════════ */
+const DEFAULT_VIDEO_ID = "7bGKwWMHXpQ";
+const DEFAULT_SRT      = "subs.srt";
 
-// Load SRT
-fetch("subs.srt")
-  .then(res => res.text())
-  .then(data => parseSRT(data));
+/* ═══════════════════════════════════════════
+   STATE
+   ═══════════════════════════════════════════ */
+let player, subs = [], lastTxt = null, lastIdx = -1;
+let chosenVid = null, pendingFile = null, subOffset = 0;
+let settingsOpen = false, subListOpen = false, subsVisible = true;
+let pillTimer = null;
 
-// YouTube video link
-const youtubeLink = "https://www.youtube.com/watch?v=7bGKwWMHXpQ";
-
-// Extract video ID
-function extractVideoID(url){
-  let id="";
-  if(url.includes("v=")) id=url.split("v=")[1].split("&")[0];
-  else if(url.includes("youtu.be/")) id=url.split("youtu.be/")[1].split("?")[0];
-  else if(url.includes("embed/")) id=url.split("embed/")[1].split("?")[0];
-  return id;
+/* ═══════════════════════════════════════════
+   MODAL
+   ═══════════════════════════════════════════ */
+async function pasteURL() {
+  try {
+    document.getElementById('url-input').value = await navigator.clipboard.readText();
+  } catch { showToast('⚠ Clipboard blocked'); }
 }
 
-// Auto-load video
-function loadVideo(){
-  let videoID = extractVideoID(youtubeLink);
-  player = new YT.Player("video",{
-    height:"180",
-    width:"320",
-    videoId:videoID,
-    playerVars:{rel:0,modestbranding:1,playsinline:1,autoplay:1},
-    events:{'onReady':onPlayerReady}
+function onFilePick(e) {
+  pendingFile = e.target.files[0];
+  document.getElementById('file-name').textContent = pendingFile ? pendingFile.name : 'Choose file or drag & drop…';
+  document.getElementById('file-drop-label').classList.toggle('has', !!pendingFile);
+}
+function clearFile(e) {
+  e.preventDefault(); e.stopPropagation();
+  pendingFile = null;
+  document.getElementById('sub-file').value = '';
+  document.getElementById('file-name').textContent = 'Choose file or drag & drop…';
+  document.getElementById('file-drop-label').classList.remove('has');
+}
+
+function nudgeModal(d) {
+  const inp = document.getElementById('offset-input');
+  let v = Math.round((parseFloat(inp.value)||0) + d * 10) / 10;
+  inp.value = v.toFixed(1);
+}
+
+function launch() {
+  const url = document.getElementById('url-input').value.trim();
+  const vid = extractVid(url);
+  if (url && !vid) { showToast('⚠ Invalid YouTube URL'); return; }
+  if (!url && !pendingFile) { showToast('⚠ Enter a URL or pick a subtitle file'); return; }
+  chosenVid = vid || DEFAULT_VIDEO_ID;
+  subOffset = parseFloat(document.getElementById('offset-input').value) || 0;
+  pendingFile ? readFile(pendingFile, go) : loadDefault(go);
+}
+function launchDefaults() { chosenVid = DEFAULT_VIDEO_ID; loadDefault(go); }
+
+function go() {
+  const m = document.getElementById('modal');
+  m.classList.add('hiding');
+  setTimeout(() => m.classList.add('gone'), 350);
+  buildList();
+}
+
+function loadDefault(cb) {
+  fetch(DEFAULT_SRT).then(r => r.ok ? r.text() : Promise.reject())
+    .then(t => { subs = parseSRT(t); cb(); })
+    .catch(() => { showToast('ℹ No default subs found'); subs = []; cb(); });
+}
+
+function readFile(file, cb) {
+  const r = new FileReader();
+  r.onload = e => {
+    const txt = e.target.result;
+    if (/\.ass$/i.test(file.name) || /\.ssa$/i.test(file.name)) subs = parseASS(txt);
+    else if (/\.vtt$/i.test(file.name)) subs = parseVTT(txt);
+    else subs = parseSRT(txt);
+    showToast('✓ ' + subs.length + ' cues loaded');
+    buildList();
+    cb();
+  };
+  r.readAsText(file);
+}
+
+/* ═══════════════════════════════════════════
+   YOUTUBE
+   ═══════════════════════════════════════════ */
+function onYouTubeIframeAPIReady() {
+  const w = setInterval(() => {
+    if (!document.getElementById('modal').classList.contains('gone')) return;
+    clearInterval(w);
+    player = new YT.Player('player', {
+      videoId: chosenVid,
+      playerVars: {
+        autoplay:1, controls:1, rel:0, modestbranding:1,
+        playsinline:1, cc_load_policy:0, iv_load_policy:3
+      },
+      events: { onReady: onPlayerReady }
+    });
+  }, 100);
+}
+
+function onPlayerReady(e) {
+  const ifr = e.target.getIframe();
+  ifr.style.cssText = 'position:fixed;inset:0;width:100%;height:100%;border:none;';
+  document.getElementById('float-pill').style.display = 'flex';
+  showPill();
+  schedulePillHide();
+  (function loop() { tick(); requestAnimationFrame(loop); })();
+}
+
+/* ═══════════════════════════════════════════
+   SUBTITLE ENGINE
+   ═══════════════════════════════════════════ */
+function tick() {
+  if (!player?.getCurrentTime) return;
+  const t = player.getCurrentTime() + subOffset;
+  let txt = '', idx = -1;
+  for (let i = 0; i < subs.length; i++) {
+    if (t >= subs[i].start && t <= subs[i].end) { txt = subs[i].text; idx = i; break; }
+  }
+  if (txt === lastTxt) return;
+  lastTxt = txt;
+  const el = document.getElementById('subtitle');
+  el.textContent = txt;
+  el.classList.toggle('blank', !txt || !subsVisible);
+  if (idx !== lastIdx) { lastIdx = idx; hlItem(idx); }
+}
+
+/* ═══════════════════════════════════════════
+   PILL VISIBILITY
+   ═══════════════════════════════════════════ */
+function showPill() {
+  cancelPillHide();
+  const p = document.getElementById('float-pill');
+  p.classList.remove('autohide');
+}
+function schedulePillHide() {
+  cancelPillHide();
+  pillTimer = setTimeout(() => {
+    if (settingsOpen || subListOpen) return;
+    document.getElementById('float-pill').classList.add('autohide');
+  }, 2500);
+}
+function cancelPillHide() { clearTimeout(pillTimer); }
+
+/* ═══════════════════════════════════════════
+   CONTROLS
+   ═══════════════════════════════════════════ */
+
+// -- Fullscreen (page-level so subs stay) --
+function toggleFullscreen() {
+  if (!document.fullscreenElement) document.documentElement.requestFullscreen().catch(()=>{});
+  else document.exitFullscreen();
+}
+document.addEventListener('fullscreenchange', () => {
+  document.getElementById('fs-icon').textContent = document.fullscreenElement ? '✕' : '⛶';
+});
+
+// -- Subtitle visibility --
+function toggleSubVis() {
+  subsVisible = !subsVisible;
+  document.getElementById('subtitle').classList.toggle('blank', !subsVisible);
+  document.getElementById('eye-icon').textContent = subsVisible ? '👁' : '🚫';
+  lastTxt = null; // force refresh
+  showToast(subsVisible ? 'Subtitles visible' : 'Subtitles hidden');
+}
+
+// -- Live offset --
+function adjustOffsetLive(d) {
+  subOffset = Math.round((subOffset + d) * 10) / 10;
+  lastTxt = null;
+  const el = document.getElementById('offset-indicator');
+  el.textContent = `Offset: ${subOffset >= 0 ? '+' : ''}${subOffset.toFixed(1)}s`;
+  el.classList.add('show');
+  clearTimeout(el._t);
+  el._t = setTimeout(() => el.classList.remove('show'), 1400);
+}
+
+// -- Settings --
+function toggleSettings() {
+  settingsOpen = !settingsOpen;
+  document.getElementById('settings-panel').classList.toggle('open', settingsOpen);
+  document.getElementById('btn-set').classList.toggle('active', settingsOpen);
+  if (settingsOpen && subListOpen) toggleSubList();
+  if (settingsOpen) { showPill(); cancelPillHide(); }
+  else schedulePillHide();
+}
+
+function applySet() {
+  const el = document.getElementById('subtitle');
+  const wrap = document.getElementById('subtitle-wrap');
+  const sz = document.getElementById('set-size').value;
+  const bg = document.getElementById('set-bg').value;
+  const pos = document.getElementById('set-pos').value;
+  const font = document.getElementById('set-font').value;
+  el.style.fontSize = sz + 'px';
+  el.style.background = `rgba(8,8,8,${bg/100})`;
+  el.style.fontFamily = font;
+  wrap.style.bottom = pos + 'px';
+  document.getElementById('v-size').textContent = sz + 'px';
+  document.getElementById('v-bg').textContent = bg + '%';
+  document.getElementById('v-pos').textContent = pos + 'px';
+}
+
+function pickColor(c, sw) {
+  document.getElementById('subtitle').style.color = c;
+  document.querySelectorAll('.color-swatch').forEach(s => s.classList.remove('active'));
+  sw.classList.add('active');
+}
+
+function resetSettings() {
+  document.getElementById('set-size').value = 42;
+  document.getElementById('set-bg').value = 85;
+  document.getElementById('set-pos').value = 90;
+  document.getElementById('set-font').value = "'Segoe UI', system-ui, sans-serif";
+  pickColor('#ffd700', document.querySelector('.color-swatch'));
+  applySet();
+  showToast('Settings reset');
+}
+
+// -- Subtitle list --
+function toggleSubList() {
+  subListOpen = !subListOpen;
+  document.getElementById('sublist-panel').classList.toggle('open', subListOpen);
+  document.getElementById('btn-list').classList.toggle('active', subListOpen);
+  if (subListOpen && settingsOpen) toggleSettings();
+  if (subListOpen) { showPill(); cancelPillHide(); }
+  else schedulePillHide();
+}
+
+function buildList() {
+  document.getElementById('sub-count').textContent = `(${subs.length})`;
+  document.getElementById('list-badge').classList.toggle('on', subs.length > 0);
+  document.getElementById('slist').innerHTML = subs.map((s,i) =>
+    `<div class="si" data-i="${i}" onclick="seekSub(${i})">
+       <span class="si-t">${fmtT(s.start)}</span>
+       <span class="si-txt">${esc(s.text.substring(0,140))}</span>
+     </div>`
+  ).join('');
+}
+
+function filterSubs() {
+  const q = document.getElementById('sub-search').value.toLowerCase();
+  document.querySelectorAll('.si').forEach(el => {
+    el.style.display = el.querySelector('.si-txt').textContent.toLowerCase().includes(q) ? '' : 'none';
   });
 }
-function onYouTubeIframeAPIReady(){ loadVideo(); }
-function onPlayerReady(){ setInterval(updateSubtitle,100); }
 
-// Parse SRT
-function parseSRT(data){
-  let blocks=data.split(/\n\n+/);
-  subtitles=blocks.map(block=>{
-    let lines=block.split("\n");
-    if(lines.length>=3){
-      let times=lines[1].split(" --> ");
-      return { start:toSeconds(times[0]), end:toSeconds(times[1]), text:lines.slice(2).join(" ") };
+function hlItem(idx) {
+  document.querySelectorAll('.si.now').forEach(e => e.classList.remove('now'));
+  if (idx >= 0) {
+    const el = document.querySelector(`.si[data-i="${idx}"]`);
+    if (el) {
+      el.classList.add('now');
+      if (subListOpen) el.scrollIntoView({ behavior:'smooth', block:'nearest' });
     }
+  }
+}
+
+function seekSub(i) {
+  if (!player?.seekTo) return;
+  player.seekTo(Math.max(0, subs[i].start - subOffset), true);
+}
+
+/* ═══════════════════════════════════════════
+   PARSERS
+   ═══════════════════════════════════════════ */
+function parseSRT(d) {
+  return d.split(/\r?\n\r?\n+/).map(b => {
+    const l = b.trim().split(/\r?\n/);
+    const ti = l.findIndex(x => x.includes('-->'));
+    if (ti < 0 || ti + 1 >= l.length) return null;
+    const [a,z] = l[ti].split('-->');
+    return { start:toS(a), end:toS(z), text: l.slice(ti+1).join('\n').replace(/<[^>]+>/g,'').replace(/\{[^}]+\}/g,'') };
   }).filter(Boolean);
 }
-function toSeconds(time){
-  let parts=time.replace(",",".").split(":");
-  return parseFloat(parts[0])*3600 + parseFloat(parts[1])*60 + parseFloat(parts[2]);
+function parseVTT(d) {
+  return d.replace(/^WEBVTT[^\n]*\n/,'').split(/\r?\n\r?\n+/).map(b => {
+    const l = b.trim().split(/\r?\n/);
+    const ti = l.findIndex(x => x.includes('-->'));
+    if (ti < 0) return null;
+    const [a,z] = l[ti].split('-->');
+    return { start:toS(a), end:toS(z), text: l.slice(ti+1).join('\n').replace(/<[^>]+>/g,'') };
+  }).filter(Boolean);
 }
-
-// Update subtitle
-function updateSubtitle(){
-  if(!player || !player.getCurrentTime) return;
-  let time=player.getCurrentTime();
-  for(let s of subtitles){
-    if(time>=s.start && time<=s.end){
-      displaySubtitle(s.text);
-      return;
-    }
+function parseASS(d) {
+  const r = [];
+  for (const ln of d.split(/\r?\n/)) {
+    if (!ln.startsWith('Dialogue:')) continue;
+    const p = ln.substring(9).split(',');
+    if (p.length < 10) continue;
+    let txt = p.slice(9).join(',').replace(/\{[^}]*\}/g,'').replace(/\\N/g,'\n').replace(/\\n/g,'\n').trim();
+    if (txt) r.push({ start:toSA(p[1].trim()), end:toSA(p[2].trim()), text:txt });
   }
+  return r.sort((a,b) => a.start - b.start);
 }
 
-// Smart subtitle display with auto font scaling
-function displaySubtitle(text){
-  const subEl = document.getElementById("subtitle");
-  subEl.innerText = text;
-  let fontSize = 80; // default
-  subEl.style.fontSize = fontSize + "px";
-
-  // Reduce font size until it fits inside 90% width
-  while(subEl.scrollWidth > window.innerWidth * 0.9 && fontSize > 20){
-    fontSize -= 2;
-    subEl.style.fontSize = fontSize + "px";
-  }
+function toS(t) {
+  const p = t.trim().replace(',','.').split(':');
+  if (p.length===3) return +p[0]*3600 + +p[1]*60 + parseFloat(p[2]);
+  if (p.length===2) return +p[0]*60 + parseFloat(p[1]);
+  return parseFloat(p[0])||0;
 }
+function toSA(t) { const p=t.split(':'); return +p[0]*3600 + +p[1]*60 + parseFloat(p[2]); }
 
-// Keyboard shortcuts
-document.addEventListener("keydown",function(e){
-  if(!player) return;
-  let t = player.getCurrentTime();
-  switch(e.code){
-    case "Space": togglePlay(); e.preventDefault(); break;
-    case "ArrowRight": seek(10); break;
-    case "ArrowLeft": seek(-10); break;
-    case "KeyL": seek(60); break;
-    case "KeyJ": seek(-60); break;
+function extractVid(url) {
+  if (!url) return '';
+  const m = url.match(/(?:v=|youtu\.be\/|embed\/|\/v\/|\/shorts\/)([a-zA-Z0-9_-]{11})/);
+  return m ? m[1] : '';
+}
+function fmtT(s) {
+  const m = Math.floor(s/60), sec = Math.floor(s%60);
+  return String(m).padStart(2,'0') + ':' + String(sec).padStart(2,'0');
+}
+function esc(s) { return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+
+/* ═══════════════════════════════════════════
+   KEYBOARD
+   ═══════════════════════════════════════════ */
+document.addEventListener('keydown', e => {
+  if (e.target.tagName==='INPUT' || e.target.tagName==='SELECT' || e.target.tagName==='TEXTAREA') return;
+  if (!document.getElementById('modal').classList.contains('gone')) return;
+  switch(e.code) {
+    case 'KeyF': e.preventDefault(); toggleFullscreen(); break;
+    case 'KeyS': toggleSettings(); break;
+    case 'KeyL': toggleSubList(); break;
+    case 'KeyH': toggleSubVis(); break;
+    case 'KeyZ': adjustOffsetLive(-0.5); break;
+    case 'KeyX': adjustOffsetLive(+0.5); break;
+    case 'KeyR': subOffset=0; lastTxt=null; adjustOffsetLive(0); showToast('Offset reset'); break;
+    case 'Escape':
+      if (settingsOpen) toggleSettings();
+      if (subListOpen) toggleSubList();
+      break;
   }
 });
 
-// Seek function
-function seek(seconds){
-  if(!player) return;
-  let t = player.getCurrentTime();
-  player.seekTo(Math.max(t+seconds,0),true);
+/* ═══════════════════════════════════════════
+   DRAG & DROP
+   ═══════════════════════════════════════════ */
+let dragC = 0;
+document.addEventListener('dragenter', e => { e.preventDefault(); dragC++; document.getElementById('drag-overlay').classList.add('on'); });
+document.addEventListener('dragleave', () => { if (--dragC <= 0) { dragC=0; document.getElementById('drag-overlay').classList.remove('on'); }});
+document.addEventListener('dragover', e => e.preventDefault());
+document.addEventListener('drop', e => {
+  e.preventDefault(); dragC=0;
+  document.getElementById('drag-overlay').classList.remove('on');
+  const f = e.dataTransfer.files[0];
+  if (!f) return;
+  if (!document.getElementById('modal').classList.contains('gone')) {
+    pendingFile = f;
+    document.getElementById('file-name').textContent = f.name;
+    document.getElementById('file-drop-label').classList.add('has');
+  } else readFile(f, ()=>{});
+});
+
+/* ═══════════════════════════════════════════
+   TOAST
+   ═══════════════════════════════════════════ */
+let tTimer;
+function showToast(msg) {
+  const el = document.getElementById('toast');
+  el.textContent = msg; el.classList.add('show');
+  clearTimeout(tTimer);
+  tTimer = setTimeout(() => el.classList.remove('show'), 2500);
 }
 
-// Play/pause toggle
-function togglePlay(){
-  if(!player) return;
-  player.getPlayerState()===1 ? player.pauseVideo() : player.playVideo();
-}
+/* ═══════════════════════════════════════════
+   ENTER KEY ON URL
+   ═══════════════════════════════════════════ */
+document.getElementById('url-input').addEventListener('keydown', e => { if (e.key==='Enter') launch(); });
 </script>
 </body>
 </html>
